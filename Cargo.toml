@@ -1,0 +1,16 @@
+[package]
+name = "dnd-thing-server"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+actix-web = "4.9.0"
+actix-ws = "0.3.0"
+futures-util = "0.3.31"
+oauth2 = "4.4.2"
+lazy_static = "1.5.0"
+anyhow = "1.0.94"
+serde = { version = "1.0.215", features = ["derive"] }
+dotenv = "0.15.0"
+toml = "0.8.19"
+serde_derive = "1.0.215"
