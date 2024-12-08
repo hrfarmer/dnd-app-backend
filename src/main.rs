@@ -6,6 +6,8 @@ use oauth2::basic::BasicClient;
 use oauth2::{
     AuthUrl, ClientId, ClientSecret, CsrfToken, PkceCodeChallenge, RedirectUrl, Scope, TokenUrl,
 };
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
 #[get("/")]
 async fn hello() -> impl Responder {
@@ -43,6 +45,7 @@ async fn main() -> std::io::Result<()> {
         csrf_token,
         pkce_verifier: String::from(pkce_verifier.secret().clone()),
         client,
+        connections: Arc::new(Mutex::new(HashMap::new())),
     });
 
     HttpServer::new(move || {
@@ -51,7 +54,7 @@ async fn main() -> std::io::Result<()> {
             .service(hello)
             .service(auth::login_url)
             .service(auth::discord_token)
-            .service(ws::connect_ws)
+            .service(ws::ws_handler)
     })
     .bind(("127.0.0.1", 8080))?
     .run()
