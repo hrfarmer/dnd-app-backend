@@ -6,7 +6,6 @@ use oauth2::basic::{
 use oauth2::{Client, CsrfToken, StandardRevocableToken};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use uuid::Uuid;
 
 pub mod auth;
 pub mod config;
@@ -24,5 +23,5 @@ pub struct AppState {
         StandardRevocableToken,
         BasicRevocationErrorResponse,
     >,
-    pub connections: Arc<Mutex<HashMap<Uuid, Session>>>,
+    pub connections: Arc<Mutex<HashMap<String, Session>>>,
 }

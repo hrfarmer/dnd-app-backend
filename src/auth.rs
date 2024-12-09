@@ -4,15 +4,15 @@ use oauth2::reqwest::async_http_client;
 use oauth2::{AuthorizationCode, PkceCodeVerifier, TokenResponse};
 use serde::Deserialize;
 
-#[get("/login-url")]
-pub async fn login_url(data: web::Data<AppState>) -> impl Responder {
-    HttpResponse::Ok().body(data.auth_url.clone())
-}
-
 #[derive(Deserialize)]
 struct TokenState {
     code: String,
     state: String,
+}
+
+#[get("/login-url")]
+pub async fn login_url(data: web::Data<AppState>) -> impl Responder {
+    HttpResponse::Ok().body(data.auth_url.clone())
 }
 
 #[get("/discord-token")]
