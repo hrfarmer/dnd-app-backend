@@ -1,4 +1,6 @@
-use crate::AppState;
+use std::collections::HashMap;
+
+use crate::{AppState, DiscordUser};
 use actix_web::get;
 use futures_util::StreamExt as _;
 use reqwest::StatusCode;
@@ -8,26 +10,8 @@ use serde::{Deserialize, Serialize};
 #[serde(tag = "type", content = "data")]
 enum WebsocketMessage {
     Session(DiscordUser),
+    ConnectedUsers(HashMap<String, DiscordUser>),
     Message(String),
-}
-#[derive(Deserialize, Serialize, Clone)]
-struct DiscordUser {
-    id: String,
-    username: String,
-    discriminator: String,
-    global_name: Option<String>,
-    avatar: Option<String>,
-    bot: Option<bool>,
-    system: Option<bool>,
-    mfa_enabled: Option<bool>,
-    banner: Option<String>,
-    accent_color: Option<u64>,
-    locale: Option<String>,
-    verified: Option<bool>,
-    email: Option<String>,
-    flags: Option<u64>,
-    premium_type: Option<u64>,
-    public_flags: Option<u64>,
 }
 
 #[get("/ws")]
@@ -78,6 +62,14 @@ async fn ws_handler(
     let session_message = WebsocketMessage::Session(user.clone());
     let _ = session.text(serde_json::to_string(&session_message)?).await;
 
+    {
+        let mut sessions = data.sessions.lock().unwrap();
+        sessions.insert(user.id.clone(), user.clone());
+
+        let message = WebsocketMessage::ConnectedUsers(sessions.clone());
+        let _ = session.text(serde_json::to_string(&message)?).await;
+    }
+
     actix_web::rt::spawn(async move {
         while let Some(msg) = stream.next().await {
             match msg {
@@ -93,16 +85,19 @@ async fn ws_handler(
             }
         }
         {
+            println!("User {} disconnecting", user.id);
             let mut conns = data.connections.lock().unwrap();
+            let mut sessions = data.sessions.lock().unwrap();
             conns.remove(&user.id.clone());
+            sessions.remove(&user.id.clone());
         }
     });
     Ok(res)
 }
+
 async fn broadcast_message(state: &AppState, sender_id: String, message: String) {
     let mut conns = state.connections.lock().unwrap();
-    for (id, mut session) in conns.iter_mut() {
-        println!("Sender id: {}, Pulled id: {}", sender_id, id);
+    for (id, session) in conns.iter_mut() {
         if *id != sender_id {
             println!("Sending to {}", id);
             let _ = session.text(message.clone()).await;

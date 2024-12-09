@@ -1,5 +1,4 @@
 use actix_web::{get, web, App, HttpResponse, HttpServer, Responder};
-use anyhow;
 use dnd_thing_server::{auth, config, ws, AppState};
 use lazy_static::lazy_static;
 use oauth2::basic::BasicClient;
@@ -46,6 +45,7 @@ async fn main() -> std::io::Result<()> {
         pkce_verifier: String::from(pkce_verifier.secret().clone()),
         client,
         connections: Arc::new(Mutex::new(HashMap::new())),
+        sessions: Arc::new(Mutex::new(HashMap::new())),
     });
 
     HttpServer::new(move || {
