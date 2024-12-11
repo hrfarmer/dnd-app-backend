@@ -1,10 +1,15 @@
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    time::{Duration, Instant},
+};
 
 use crate::{AppState, DiscordUser};
 use actix_web::get;
-use futures_util::StreamExt as _;
+use actix_ws::{AggregatedMessage, Message};
+use futures_util::{future, StreamExt as _};
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
+use tokio::{pin, time::interval};
 
 #[derive(Deserialize, Serialize, Clone)]
 #[serde(tag = "type", content = "data")]
@@ -70,27 +75,76 @@ async fn ws_handler(
         let _ = session.text(serde_json::to_string(&message)?).await;
     }
 
+    // ping variables
+    const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(10);
+    const CLIENT_TIMEOUT: Duration = Duration::from_secs(10);
+    let mut last_heartbeat = Instant::now();
+    let mut interval = interval(HEARTBEAT_INTERVAL);
+
     actix_web::rt::spawn(async move {
-        while let Some(msg) = stream.next().await {
-            match msg {
-                Ok(actix_ws::AggregatedMessage::Text(text)) => {
-                    println!("New message: {}", text.to_string());
-                    broadcast_message(&data, user.id.clone(), text.to_string()).await;
+        let reason = loop {
+            let tick = interval.tick();
+            pin!(tick);
+
+            match future::select(stream.next(), tick).await {
+                future::Either::Left((Some(Ok(msg)), _)) => {
+                    println!("msg: {msg:?}");
+
+                    match msg {
+                        AggregatedMessage::Text(text) => {
+                            broadcast_message(&data, user.id.clone(), text.to_string()).await;
+                        }
+
+                        // binary not used
+                        AggregatedMessage::Binary(_) => {
+                            continue;
+                        }
+
+                        AggregatedMessage::Close(reason) => {
+                            break reason;
+                        }
+
+                        AggregatedMessage::Ping(bytes) => {
+                            last_heartbeat = Instant::now();
+                            let _ = session.pong(&bytes).await;
+                        }
+
+                        AggregatedMessage::Pong(_) => {
+                            last_heartbeat = Instant::now();
+                        }
+                    }
                 }
-                Ok(actix_ws::AggregatedMessage::Ping(msg)) => {
-                    let _ = session.pong(&msg).await;
+
+                // client WebSocket stream error
+                future::Either::Left((Some(Err(err)), _)) => {
+                    eprintln!("{}", err);
+                    break None;
                 }
-                Err(_) => break,
-                _ => {}
+
+                // client WebSocket stream ended
+                future::Either::Left((None, _)) => break None,
+
+                // heartbeat ticked
+                future::Either::Right((_inst, _)) => {
+                    if Instant::now().duration_since(last_heartbeat) > CLIENT_TIMEOUT {
+                        println!("Client didn't respond to heartbeat, disconnecting");
+
+                        break None;
+                    }
+
+                    let _ = session.ping(b"").await;
+                }
             }
-        }
-        {
-            println!("User {} disconnecting", user.id);
-            let mut conns = data.connections.lock().unwrap();
-            let mut sessions = data.sessions.lock().unwrap();
-            conns.remove(&user.id.clone());
-            sessions.remove(&user.id.clone());
-        }
+        };
+
+        // disconnect and remove user
+        let _ = session.close(reason).await;
+        println!("User {} disconnecting", user.id);
+
+        let mut conns = data.connections.lock().unwrap();
+        let mut sessions = data.sessions.lock().unwrap();
+        conns.remove(&user.id.clone());
+        sessions.remove(&user.id.clone());
     });
     Ok(res)
 }
