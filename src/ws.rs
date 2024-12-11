@@ -76,7 +76,7 @@ async fn ws_handler(
     }
 
     // ping variables
-    const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(10);
+    const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(5);
     const CLIENT_TIMEOUT: Duration = Duration::from_secs(10);
     let mut last_heartbeat = Instant::now();
     let mut interval = interval(HEARTBEAT_INTERVAL);
@@ -88,10 +88,15 @@ async fn ws_handler(
 
             match future::select(stream.next(), tick).await {
                 future::Either::Left((Some(Ok(msg)), _)) => {
-                    println!("msg: {msg:?}");
-
                     match msg {
                         AggregatedMessage::Text(text) => {
+                            let time = chrono::Utc::now().format("%H:%M:%S").to_string();
+                            println!(
+                                "{:} msg from {}: {:?}",
+                                time,
+                                user.username,
+                                text.to_string()
+                            );
                             broadcast_message(&data, user.id.clone(), text.to_string()).await;
                         }
 
