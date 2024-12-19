@@ -12,11 +12,17 @@ use serde::{Deserialize, Serialize};
 use tokio::{pin, time::interval};
 
 #[derive(Deserialize, Serialize, Clone)]
+struct ChatMessage {
+    author: String,
+    content: String,
+}
+
+#[derive(Deserialize, Serialize, Clone)]
 #[serde(tag = "type", content = "data")]
 enum WebsocketMessage {
     Session(DiscordUser),
     ConnectedUsers(HashMap<String, DiscordUser>),
-    Message(String),
+    Message(ChatMessage),
     Disconnect(String),
 }
 
@@ -69,11 +75,17 @@ async fn ws_handler(
     let _ = session.text(serde_json::to_string(&session_message)?).await;
 
     {
+        let mut conns = data.connections.lock().unwrap();
+
         let mut sessions = data.sessions.lock().unwrap();
         sessions.insert(user.id.clone(), user.clone());
 
         let message = WebsocketMessage::ConnectedUsers(sessions.clone());
         let _ = session.text(serde_json::to_string(&message)?).await;
+
+        for (_, session) in conns.iter_mut() {
+            let _ = session.text(serde_json::to_string(&message)?).await;
+        }
     }
 
     // ping variables
@@ -107,7 +119,7 @@ async fn ws_handler(
                                     });
                                 }
                             }
-                            broadcast_message(&data, user.id.clone(), text.to_string()).await;
+                            handle_message(&data, user.id.clone(), text.to_string()).await;
                         }
 
                         // binary not used
@@ -160,16 +172,30 @@ async fn ws_handler(
         let mut sessions = data.sessions.lock().unwrap();
         conns.remove(&user.id.clone());
         sessions.remove(&user.id.clone());
+
+        let message = WebsocketMessage::ConnectedUsers(sessions.clone());
+
+        for (_, session) in conns.iter_mut() {
+            let _ = session.text(serde_json::to_string(&message).unwrap()).await;
+        }
     });
     Ok(res)
 }
 
-async fn broadcast_message(state: &AppState, sender_id: String, message: String) {
+async fn handle_message(state: &AppState, sender_id: String, message: String) {
     let mut conns = state.connections.lock().unwrap();
     for (id, session) in conns.iter_mut() {
         if *id != sender_id {
-            println!("Sending to {}", id);
-            let _ = session.text(message.clone()).await;
+            // just one message type for now, will handle more message types later
+            let _ = session
+                .text(
+                    serde_json::to_string(&WebsocketMessage::Message(ChatMessage {
+                        author: sender_id.clone(),
+                        content: message.clone(),
+                    }))
+                    .unwrap(),
+                )
+                .await;
         }
     }
 }
