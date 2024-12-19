@@ -5,7 +5,7 @@ use std::{
 
 use crate::{AppState, DiscordUser};
 use actix_web::get;
-use actix_ws::{AggregatedMessage, Message};
+use actix_ws::{AggregatedMessage, CloseReason, Message};
 use futures_util::{future, StreamExt as _};
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
@@ -17,6 +17,7 @@ enum WebsocketMessage {
     Session(DiscordUser),
     ConnectedUsers(HashMap<String, DiscordUser>),
     Message(String),
+    Disconnect(String),
 }
 
 #[get("/ws")]
@@ -97,6 +98,15 @@ async fn ws_handler(
                                 user.username,
                                 text.to_string()
                             );
+
+                            if let Ok(message) = serde_json::from_str::<WebsocketMessage>(&text) {
+                                if let WebsocketMessage::Disconnect(reason) = message {
+                                    break Some(CloseReason {
+                                        code: actix_ws::CloseCode::Normal,
+                                        description: Some(reason),
+                                    });
+                                }
+                            }
                             broadcast_message(&data, user.id.clone(), text.to_string()).await;
                         }
 
