@@ -39,6 +39,8 @@ async fn main() -> std::io::Result<()> {
         .set_pkce_challenge(pkce_challenge)
         .url();
 
+    println!("{}", auth_url);
+
     let app_state = web::Data::new(AppState {
         auth_url: auth_url.to_string(),
         csrf_token,

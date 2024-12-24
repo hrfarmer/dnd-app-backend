@@ -66,22 +66,18 @@ async fn ws_handler(
     };
 
     println!("{}", format!("New connection: {}", user.id.clone()));
-    {
-        let mut conns = data.connections.lock().unwrap();
-        conns.insert(user.id.clone(), session.clone());
-    }
 
     let session_message = WebsocketMessage::Session(user.clone());
     let _ = session.text(serde_json::to_string(&session_message)?).await;
 
     {
         let mut conns = data.connections.lock().unwrap();
+        conns.insert(user.id.clone(), session.clone());
 
         let mut sessions = data.sessions.lock().unwrap();
         sessions.insert(user.id.clone(), user.clone());
 
         let message = WebsocketMessage::ConnectedUsers(sessions.clone());
-        let _ = session.text(serde_json::to_string(&message)?).await;
 
         for (_, session) in conns.iter_mut() {
             let _ = session.text(serde_json::to_string(&message)?).await;
