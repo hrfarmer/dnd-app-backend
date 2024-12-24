@@ -5,11 +5,13 @@ use oauth2::basic::{
 };
 use oauth2::{Client, CsrfToken, StandardRevocableToken};
 use serde::{Deserialize, Serialize};
+use sqlx::{Pool, Postgres};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 pub mod auth;
 pub mod config;
+pub mod db;
 pub mod ws;
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -23,13 +25,13 @@ pub struct DiscordUser {
     system: Option<bool>,
     mfa_enabled: Option<bool>,
     banner: Option<String>,
-    accent_color: Option<u64>,
+    accent_color: Option<i32>,
     locale: Option<String>,
     verified: Option<bool>,
     email: Option<String>,
-    flags: Option<u64>,
-    premium_type: Option<u64>,
-    public_flags: Option<u64>,
+    flags: Option<i32>,
+    premium_type: Option<i32>,
+    public_flags: Option<i32>,
 }
 
 pub struct AppState {
@@ -46,4 +48,5 @@ pub struct AppState {
     >,
     pub connections: Arc<Mutex<HashMap<String, Session>>>,
     pub sessions: Arc<Mutex<HashMap<String, DiscordUser>>>,
+    pub db_conn: Pool<Postgres>,
 }

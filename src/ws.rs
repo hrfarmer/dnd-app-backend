@@ -3,11 +3,10 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::{AppState, DiscordUser};
+use crate::{auth::get_user, AppState, DiscordUser};
 use actix_web::get;
-use actix_ws::{AggregatedMessage, CloseReason, Message};
+use actix_ws::{AggregatedMessage, CloseReason};
 use futures_util::{future, StreamExt as _};
-use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use tokio::{pin, time::interval};
 
@@ -39,27 +38,10 @@ async fn ws_handler(
 
     let user: DiscordUser = match req.headers().get("Authorization") {
         Some(header) => match header.to_str() {
-            Ok(token) => {
-                let client = reqwest::Client::new();
-                let resp = client
-                    .get("https://discord.com/api/users/@me")
-                    .header(reqwest::header::AUTHORIZATION, token)
-                    .send()
-                    .await;
-
-                match resp {
-                    Ok(r) => {
-                        if r.status() == StatusCode::OK {
-                            r.json::<DiscordUser>().await.map_err(|_| {
-                                actix_web::error::ErrorForbidden("Invalid token parsing")
-                            })?
-                        } else {
-                            return Err(actix_web::error::ErrorForbidden("Invalid token"));
-                        }
-                    }
-                    Err(_) => return Err(actix_web::error::ErrorForbidden("Invalid token")),
-                }
-            }
+            Ok(token) => match get_user(token.to_string()).await {
+                Ok(user) => user,
+                Err(err) => return Err(err),
+            },
             Err(_) => return Err(actix_web::error::ErrorForbidden("Failed to parse token")),
         },
         None => return Err(actix_web::error::ErrorForbidden("No token provided")),

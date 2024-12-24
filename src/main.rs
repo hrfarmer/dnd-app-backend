@@ -29,7 +29,7 @@ async fn main() -> std::io::Result<()> {
         AuthUrl::new("https://discord.com/oauth2/authorize".to_string()).unwrap(),
         Some(TokenUrl::new("https://discord.com/api/oauth2/token".to_string()).unwrap()),
     )
-    .set_redirect_uri(RedirectUrl::new("http://localhost:8080/discord-token".to_string()).unwrap());
+    .set_redirect_uri(RedirectUrl::new("http://localhost:8080/login".to_string()).unwrap());
 
     let (pkce_challenge, pkce_verifier) = PkceCodeChallenge::new_random_sha256();
 
@@ -41,6 +41,10 @@ async fn main() -> std::io::Result<()> {
 
     println!("{}", auth_url);
 
+    let conn = sqlx::postgres::PgPool::connect(config::config.global.database_url.as_str())
+        .await
+        .unwrap();
+
     let app_state = web::Data::new(AppState {
         auth_url: auth_url.to_string(),
         csrf_token,
@@ -48,6 +52,7 @@ async fn main() -> std::io::Result<()> {
         client,
         connections: Arc::new(Mutex::new(HashMap::new())),
         sessions: Arc::new(Mutex::new(HashMap::new())),
+        db_conn: conn,
     });
 
     HttpServer::new(move || {

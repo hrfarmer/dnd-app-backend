@@ -17,6 +17,7 @@ pub struct Config {
 pub struct Global {
     pub discord_client: String,
     pub discord_secret: String,
+    pub database_url: String,
 }
 
 fn open_config(path: &str) -> Config {
