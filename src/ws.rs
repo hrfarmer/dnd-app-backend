@@ -3,7 +3,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::{auth::get_user, AppState, DiscordUser};
+use crate::{auth::get_discord_user, AppState, DiscordUser};
 use actix_web::get;
 use actix_ws::{AggregatedMessage, CloseReason};
 use futures_util::{future, StreamExt as _};
@@ -38,7 +38,7 @@ async fn ws_handler(
 
     let user: DiscordUser = match req.headers().get("Authorization") {
         Some(header) => match header.to_str() {
-            Ok(token) => match get_user(token.to_string()).await {
+            Ok(token) => match get_discord_user(token.to_string()).await {
                 Ok(user) => user,
                 Err(err) => return Err(err),
             },

@@ -1,4 +1,4 @@
-use crate::db::add_user;
+use crate::db;
 use crate::{AppState, DiscordUser};
 use actix_web::{get, web, HttpResponse, Responder};
 use oauth2::reqwest::async_http_client;
@@ -29,7 +29,7 @@ pub async fn login_url(data: web::Data<AppState>) -> impl Responder {
 pub async fn discord_token(
     token: web::Query<TokenState>,
     data: web::Data<AppState>,
-) -> impl Responder {
+) -> Result<actix_web::HttpResponse, actix_web::Error> {
     let token_result = data
         .client
         .exchange_code(AuthorizationCode::new(token.code.clone()))
@@ -41,24 +41,33 @@ pub async fn discord_token(
         let token = t.access_token().secret().to_string().clone();
         let refresh_token = t.refresh_token().unwrap().secret().to_string().clone();
 
-        if let Ok(user) = get_user(token.to_string()).await {
-            if let Ok(_) = add_user(&data.db_conn, &user, &token, &refresh_token).await {
-                return HttpResponse::Ok().body(
-                    serde_json::to_string(&Session {
-                        access_token: token,
-                        refresh_token,
-                        session: user,
-                    })
-                    .unwrap(),
-                );
+        let user = get_discord_user(token.to_string()).await?;
+        if let Ok(res) = db::get_session(&data.db_conn, &token).await {
+            if res.id != user.id {
+                let _ = db::add_user(&data.db_conn, &user, &token, &refresh_token)
+                    .await
+                    .map_err(|_| {
+                        actix_web::Error::from(actix_web::error::ErrorForbidden(
+                            "Failed to add user",
+                        ))
+                    })?;
             }
+
+            return Ok(HttpResponse::Ok().body(
+                serde_json::to_string(&Session {
+                    access_token: token,
+                    refresh_token,
+                    session: user,
+                })
+                .unwrap(),
+            ));
         }
     }
 
-    HttpResponse::Forbidden().body("Failed to log in")
+    Err(actix_web::error::ErrorForbidden("Failed to log in"))
 }
 
-pub async fn get_user(token: String) -> Result<DiscordUser, actix_web::Error> {
+pub async fn get_discord_user(token: String) -> Result<DiscordUser, actix_web::Error> {
     let client = reqwest::Client::new();
     let resp = client
         .get("https://discord.com/api/users/@me")

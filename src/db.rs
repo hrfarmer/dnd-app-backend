@@ -27,3 +27,17 @@ pub async fn add_user(
             }
         };
 }
+
+pub async fn get_session(conn: &Pool<Postgres>, access_token: &str) -> Result<DiscordUser, Error> {
+    let session = sqlx::query_as!(
+        DiscordUser,
+        "
+            SELECT discord_id AS id, username, discriminator, global_name, avatar, accent_color FROM session WHERE user_id = (SELECT id FROM users WHERE access_token = $1)
+        ",
+        access_token
+    )
+    .fetch_one(conn)
+    .await;
+
+    return session;
+}
