@@ -1,12 +1,15 @@
 use std::{
     collections::HashMap,
+    io::{Error, ErrorKind},
     time::{Duration, Instant},
 };
 
 use crate::{auth::get_discord_user, AppState, DiscordUser};
+use actix::{Actor, ActorContext};
 use actix_web::get;
-use actix_ws::{AggregatedMessage, CloseReason};
+use actix_ws::{AggregatedMessage, CloseReason, Session};
 use futures_util::{future, StreamExt as _};
+use oauth2::{CsrfToken, Scope};
 use serde::{Deserialize, Serialize};
 use tokio::{pin, time::interval};
 
@@ -23,6 +26,80 @@ enum WebsocketMessage {
     ConnectedUsers(HashMap<String, DiscordUser>),
     Message(ChatMessage),
     Disconnect(String),
+}
+
+// Actor information for login websocket
+pub struct LoginActor {
+    session: Session,
+}
+
+impl LoginActor {
+    fn new(session: Session) -> Self {
+        LoginActor { session }
+    }
+}
+
+impl actix::Actor for LoginActor {
+    type Context = actix::Context<Self>;
+}
+
+#[derive(actix::Message, Deserialize)]
+#[rtype(result = "Result<bool, std::io::Error>")]
+pub struct LoginPayload {
+    pub payload: crate::UserSession,
+}
+
+impl actix::Handler<LoginPayload> for LoginActor {
+    type Result = Result<bool, std::io::Error>;
+
+    fn handle(&mut self, msg: LoginPayload, ctx: &mut actix::Context<Self>) -> Self::Result {
+        let mut session: Session = self.session.clone();
+        actix_web::rt::spawn(async move {
+            let _ = session
+                .text(serde_json::to_string(&msg.payload).unwrap())
+                .await
+                .map_err(|_| Error::new(ErrorKind::Other, "Failed to send"));
+
+            let _ = session
+                .close(Some(CloseReason {
+                    code: actix_ws::CloseCode::Normal,
+                    description: Some(String::from("Sent login")),
+                }))
+                .await;
+        });
+
+        ctx.stop();
+
+        Ok(true)
+    }
+}
+
+#[get("/ws-login")]
+async fn ws_login(
+    req: actix_web::HttpRequest,
+    stream: actix_web::web::Payload,
+    data: actix_web::web::Data<AppState>,
+) -> Result<actix_web::HttpResponse, actix_web::Error> {
+    let (res, mut session, _) = actix_ws::handle(&req, stream)?;
+
+    let state_value = uuid::Uuid::new_v4();
+
+    let (auth_url, _csrf_token) = data
+        .client
+        .authorize_url(CsrfToken::new_random)
+        .add_scope(Scope::new("identify".to_string()))
+        .add_extra_param("state", &state_value.to_string())
+        .url();
+
+    let _ = session.text(auth_url.to_string()).await;
+
+    let addr = LoginActor::new(session).start();
+    {
+        let mut pending_logins = data.pending_logins.lock().unwrap();
+        pending_logins.insert(state_value.to_string(), addr);
+    }
+
+    Ok(res)
 }
 
 #[get("/ws")]

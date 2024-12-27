@@ -1,21 +1,15 @@
-use crate::{db, UserSession};
+use crate::{db, ws, UserSession};
 use crate::{AppState, DiscordUser};
-use actix_web::{get, web, HttpResponse, Responder};
+use actix_web::{get, web, HttpResponse};
 use oauth2::reqwest::async_http_client;
-use oauth2::{AuthorizationCode, PkceCodeVerifier, TokenResponse};
+use oauth2::{AuthorizationCode, TokenResponse};
 use reqwest::StatusCode;
 use serde::Deserialize;
 
-#[allow(unused)]
 #[derive(Deserialize)]
 struct TokenState {
     code: String,
     state: String,
-}
-
-#[get("/login-url")]
-pub async fn login_url(data: web::Data<AppState>) -> impl Responder {
-    HttpResponse::Ok().body(data.auth_url.clone())
 }
 
 #[get("/session")]
@@ -44,11 +38,21 @@ pub async fn discord_token(
     let token_result = data
         .client
         .exchange_code(AuthorizationCode::new(token.code.clone()))
-        .set_pkce_verifier(PkceCodeVerifier::new(data.pkce_verifier.clone()))
         .request_async(async_http_client)
         .await;
 
     if let Ok(t) = token_result {
+        let state = token.state.clone();
+
+        {
+            let pending_logins = data.pending_logins.lock().unwrap();
+            let addr = pending_logins.get(&state);
+
+            if let None = addr {
+                return Err(actix_web::error::ErrorForbidden("Login isn't there"));
+            }
+        }
+
         let token = t.access_token().secret().to_string().clone();
         let refresh_token = t.refresh_token().unwrap().secret().to_string().clone();
 
@@ -83,7 +87,22 @@ pub async fn discord_token(
             }
         };
 
-        return Ok(HttpResponse::Ok().body(serde_json::to_string(&res).unwrap()));
+        {
+            let mut pending_logins = data.pending_logins.lock().unwrap();
+            let addr = pending_logins.get(&state);
+
+            if let Some(a) = addr {
+                let result = a.send(ws::LoginPayload { payload: res }).await;
+                match result {
+                    Ok(_) => {}
+                    Err(err) => println!("Error sending login to actor: {}", err),
+                }
+            }
+
+            pending_logins.remove(&state);
+        }
+
+        return Ok(HttpResponse::Ok().body("Logged in, return to client"));
     }
 
     Err(actix_web::error::ErrorForbidden("Failed to log in"))
