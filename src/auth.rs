@@ -48,9 +48,6 @@ pub async fn discord_token(
         .request_async(async_http_client)
         .await;
 
-    // this is currently broken because i didn't realize discord immediately gave new tokens on re-auth
-    // turn get_session into get_session_token and only use on /session, and make a get_session_id function for use with discord id here
-    // also check if the tokens are different, if so then update the db to the new ones
     if let Ok(t) = token_result {
         let token = t.access_token().secret().to_string().clone();
         let refresh_token = t.refresh_token().unwrap().secret().to_string().clone();
