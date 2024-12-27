@@ -61,6 +61,7 @@ async fn main() -> std::io::Result<()> {
             .service(hello)
             .service(auth::login_url)
             .service(auth::discord_token)
+            .service(auth::session)
             .service(ws::ws_handler)
     })
     .bind(("127.0.0.1", 8080))?

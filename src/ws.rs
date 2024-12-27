@@ -38,7 +38,7 @@ async fn ws_handler(
 
     let user: DiscordUser = match req.headers().get("Authorization") {
         Some(header) => match header.to_str() {
-            Ok(token) => match get_discord_user(token.to_string()).await {
+            Ok(token) => match get_discord_user(token[7..].to_string()).await {
                 Ok(user) => user,
                 Err(err) => return Err(err),
             },
