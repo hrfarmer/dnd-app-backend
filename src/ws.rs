@@ -39,7 +39,7 @@ impl LoginActor {
     }
 }
 
-impl actix::Actor for LoginActor {
+impl Actor for LoginActor {
     type Context = actix::Context<Self>;
 }
 
@@ -80,11 +80,12 @@ async fn ws_login(
     stream: actix_web::web::Payload,
     data: actix_web::web::Data<AppState>,
 ) -> Result<actix_web::HttpResponse, actix_web::Error> {
+    println!("Client connected to login");
     let (res, mut session, _) = actix_ws::handle(&req, stream)?;
 
     let state_value = uuid::Uuid::new_v4();
 
-    let (auth_url, _csrf_token) = data
+    let (auth_url, _) = data
         .client
         .authorize_url(CsrfToken::new_random)
         .add_scope(Scope::new("identify".to_string()))

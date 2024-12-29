@@ -18,7 +18,7 @@ pub async fn session(
     req: actix_web::HttpRequest,
 ) -> Result<actix_web::HttpResponse, actix_web::Error> {
     if let Some(header) = req.headers().get("Authorization") {
-        let access_token = &header.to_str().unwrap()[7..];
+        let access_token = &header.to_str().unwrap();
         let session = db::get_session_token(&data.db_conn, access_token)
             .await
             .map_err(|_| {
