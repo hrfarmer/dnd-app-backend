@@ -126,6 +126,7 @@ pub async fn get_user_id(conn: &Pool<Postgres>, access_token: &str) -> Result<Us
     Ok(user)
 }
 
+#[derive(serde::Serialize)]
 pub struct DndSession {
     id: i32,
     creator_id: i32,

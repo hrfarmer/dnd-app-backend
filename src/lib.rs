@@ -8,6 +8,7 @@ use sqlx::{Pool, Postgres};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
+pub mod api;
 pub mod auth;
 pub mod config;
 pub mod db;
