@@ -20,3 +20,4 @@ serde_derive = "1.0.215"
 sqlx = {version = "0.8.2", features = ["runtime-tokio", "postgres", "chrono"]}
 actix = "0.13.5"
 uuid = {version = "1.11.0", features = ["v4"]}
+rand = "0.8.5"
